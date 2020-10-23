@@ -1,0 +1,30 @@
+{
+    "name": "worksome/foggy-laravel",
+    "description": "Adds Foggy support in Laravel",
+    "type": "library",
+    "require": {
+        "php": ">=7.4",
+        "worksome/foggy": "^0.1.0",
+        "illuminate/support": "^7.0|^8.0",
+        "illuminate/console": "^7.0|^8.0"
+    },
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Oliver Nybroe",
+            "email": "oliver@worksome.com"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Worksome\\FoggyLaravel\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Worksome\\FoggyLaravel\\FoggyServiceProvider"
+            ]
+        }
+    }
+}
