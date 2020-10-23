@@ -4,7 +4,7 @@
     "type": "library",
     "require": {
         "php": ">=7.4",
-        "worksome/foggy": "^0.1.0",
+        "worksome/foggy": "^0.2",
         "illuminate/support": "^7.0|^8.0",
         "illuminate/console": "^7.0|^8.0"
     },
