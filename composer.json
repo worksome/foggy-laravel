@@ -3,10 +3,10 @@
     "description": "Adds Foggy support in Laravel",
     "type": "library",
     "require": {
-        "php": "^8.0",
-        "worksome/foggy": "^0.4|^0.5",
-        "illuminate/support": "^8.0|^9.0",
-        "illuminate/console": "^8.0|^9.0"
+        "php": "^8.2",
+        "worksome/foggy": "^0.5",
+        "illuminate/support": "^9.46",
+        "illuminate/console": "^9.46"
     },
     "license": "MIT",
     "authors": [
