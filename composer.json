@@ -5,8 +5,8 @@
     "require": {
         "php": "^8.2",
         "worksome/foggy": "^0.5",
-        "illuminate/support": "^9.46",
-        "illuminate/console": "^9.46"
+        "illuminate/support": "^9.46|^10.0",
+        "illuminate/console": "^9.46|^10.0"
     },
     "license": "MIT",
     "authors": [
