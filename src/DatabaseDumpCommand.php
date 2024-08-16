@@ -14,8 +14,9 @@ use function Safe\fopen;
 class DatabaseDumpCommand extends Command
 {
     /** {@inheritdoc} */
-    protected $signature = 'db:dump {--config= : path to a json config file}
-                                {--o|output= : path to an output file}';
+    protected $signature = 'db:dump {--config= : The path to a JSON config file}
+                                {--o|output= : The path to an output file}
+                                {--connection= : The database connection to use}';
 
     /** {@inheritdoc} */
     protected $description = 'Dump a scrubbed database.';
@@ -31,7 +32,7 @@ class DatabaseDumpCommand extends Command
         $consoleOutput = $this->option('output') ? $this->getOutput()->getOutput() : null;
 
         $process = new DumpProcess(
-            DB::connection()->getDoctrineConnection(),
+            DB::connection($this->option('connection'))->getDoctrineConnection(),
             $configFile,
             $dumpOutput,
             $consoleOutput

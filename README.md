@@ -28,3 +28,9 @@ The artisan command by default will make the database dump to `stdout`. To pass 
 ```shell
 php artisan db:dump --output scrubbed-dump.sql
 ```
+
+Foggy also supports specifying a custom database connection:
+
+```shell
+php artisan db:dump --connection mysql
+```
