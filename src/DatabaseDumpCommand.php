@@ -1,45 +1,40 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Worksome\FoggyLaravel;
 
-use Exception;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use Safe\Exceptions\JsonException;
+use Symfony\Component\Console\Output\StreamOutput;
 use Worksome\Foggy\DumpProcess;
 
-/**
- * Scrubs the database.
- */
+use function Safe\fopen;
+
 class DatabaseDumpCommand extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
-    protected $signature = 'db:dump {--config= : path to a json config file}';
+    /** {@inheritdoc} */
+    protected $signature = 'db:dump {--config= : path to a json config file}
+                                {--o|output= : path to an output file}';
 
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
+    /** {@inheritdoc} */
     protected $description = 'Dump a scrubbed database.';
 
-    /**
-     * Execute the console command.
-     *
-     * @throws Exception
-     */
     public function handle(): void
     {
-        $configFile = $this->option('config') ?:  $this->getLaravel()->basePath('foggy.json');
+        $configFile = $this->option('config') ?: $this->getLaravel()->basePath('foggy.json');
+
+        $dumpOutput = $this->option('output')
+            ? new StreamOutput(fopen($this->option('output'), 'w'))
+            : $this->getOutput()->getOutput();
+
+        $consoleOutput = $this->option('output') ? $this->getOutput()->getOutput() : null;
 
         $process = new DumpProcess(
             DB::connection()->getDoctrineConnection(),
             $configFile,
-            $this->getOutput()
+            $dumpOutput,
+            $consoleOutput
         );
 
         $process->run();

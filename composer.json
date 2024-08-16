@@ -4,9 +4,10 @@
     "type": "library",
     "require": {
         "php": "^8.2",
-        "worksome/foggy": "^0.6",
+        "illuminate/console": "^10.0 || ^11.0",
         "illuminate/support": "^10.0 || ^11.0",
-        "illuminate/console": "^10.0 || ^11.0"
+        "thecodingmachine/safe": "^2.5",
+        "worksome/foggy": "^0.6"
     },
     "license": "MIT",
     "autoload": {
@@ -20,5 +21,10 @@
                 "Worksome\\FoggyLaravel\\FoggyServiceProvider"
             ]
         }
-    }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
 }
