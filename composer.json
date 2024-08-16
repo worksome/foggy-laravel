@@ -1,7 +1,7 @@
 {
     "name": "worksome/foggy-laravel",
     "description": "Adds Foggy support in Laravel",
-    "type": "library",
+    "license": "MIT",
     "require": {
         "php": "^8.2",
         "illuminate/console": "^10.0 || ^11.0",
@@ -9,11 +9,13 @@
         "thecodingmachine/safe": "^2.5",
         "worksome/foggy": "^0.6"
     },
-    "license": "MIT",
     "autoload": {
         "psr-4": {
             "Worksome\\FoggyLaravel\\": "src/"
         }
+    },
+    "config": {
+        "sort-packages": true
     },
     "extra": {
         "laravel": {
@@ -21,9 +23,6 @@
                 "Worksome\\FoggyLaravel\\FoggyServiceProvider"
             ]
         }
-    },
-    "config": {
-        "sort-packages": true
     },
     "minimum-stability": "dev",
     "prefer-stable": true
