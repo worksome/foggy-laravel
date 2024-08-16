@@ -9,13 +9,34 @@
         "thecodingmachine/safe": "^2.5",
         "worksome/foggy": "^0.6"
     },
+    "require-dev": {
+        "orchestra/testbench": "^8.21 || ^9.0",
+        "pestphp/pest": "^2.33",
+        "pestphp/pest-plugin-laravel": "^2.2"
+    },
     "autoload": {
         "psr-4": {
             "Worksome\\FoggyLaravel\\": "src/"
         }
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Worksome\\FoggyLaravel\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": "@php ./vendor/bin/testbench package:discover --ansi",
+        "test:unit": "vendor/bin/pest -p",
+        "test:coverage": "vendor/bin/pest -p --coverage",
+        "test": [
+            "@test:unit"
+        ]
+    },
     "config": {
-        "sort-packages": true
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
     },
     "extra": {
         "laravel": {

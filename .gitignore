@@ -1,2 +1,6 @@
-vendor
-composer.lock
+/build
+/vendor
+/.phpunit.cache
+/.php-cs-fixer.cache
+/composer.lock
+/phpunit.xml
