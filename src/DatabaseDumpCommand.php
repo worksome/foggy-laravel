@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Worksome\FoggyLaravel;
 
+use Doctrine\DBAL\Connection as DoctrineConnection;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 use Symfony\Component\Console\Output\ConsoleOutput;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Output\StreamOutput;
 use Worksome\Foggy\DumpProcess;
+use Worksome\FoggyLaravel\Enums\SupportedDriver;
 
 use function Safe\fopen;
 
@@ -38,12 +41,36 @@ class DatabaseDumpCommand extends Command
         };
 
         $process = new DumpProcess(
-            DB::connection($this->option('connection'))->getDoctrineConnection(),
+            $this->getDoctrineConnection(),
             $configFile,
             $dumpOutput,
             $consoleOutput
         );
 
         $process->run();
+    }
+
+    private function getDoctrineConnection(): DoctrineConnection
+    {
+        $connection = DB::connection($this->option('connection'));
+
+        if (method_exists($connection, 'getDoctrineConnection')) {
+            return $connection->getDoctrineConnection();
+        }
+
+        $driver = match ($driverName = $connection->getDriverName()) {
+            'mysql', 'mariadb' => SupportedDriver::MySQL,
+            'pgsql', 'postgres' => SupportedDriver::PostgreSQL,
+            'sqlite' => SupportedDriver::SQLite,
+            'sqlsrv' => SupportedDriver::SqlServer,
+            default => throw new RuntimeException("Unsupported database driver provided ({$driverName})."),
+        };
+
+        return new DoctrineConnection(array_filter([
+            'pdo' => $connection->getPdo(),
+            'dbname' => $connection->getDatabaseName(),
+            'driver' => $driver->driverName(),
+            'serverVersion' => $connection->getConfig('server_version'),
+        ]), $driver->driver());
     }
 }

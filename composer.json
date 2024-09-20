@@ -4,7 +4,9 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "doctrine/dbal": "*",
         "illuminate/console": "^10.0 || ^11.0",
+        "illuminate/database": "^10.0 | ^11.0",
         "illuminate/support": "^10.0 || ^11.0",
         "thecodingmachine/safe": "^2.5",
         "worksome/foggy": "^0.6"
