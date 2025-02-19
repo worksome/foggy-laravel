@@ -8,7 +8,7 @@
         "illuminate/console": "^11.0",
         "illuminate/database": "^11.0",
         "illuminate/support": "^11.0",
-        "thecodingmachine/safe": "^2.5",
+        "thecodingmachine/safe": "^2.5 || ^3.0",
         "worksome/foggy": "^0.6"
     },
     "require-dev": {
