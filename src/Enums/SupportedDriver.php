@@ -27,20 +27,16 @@ enum SupportedDriver
     public function driver(): Driver
     {
         return match ($this) {
-            self::MySQL => new class extends Driver\AbstractMySQLDriver
-            {
+            self::MySQL => new class() extends Driver\AbstractMySQLDriver {
                 use ConnectsToDatabase;
             },
-            self::PostgreSQL => new class extends Driver\AbstractPostgreSQLDriver
-            {
+            self::PostgreSQL => new class() extends Driver\AbstractPostgreSQLDriver {
                 use ConnectsToDatabase;
             },
-            self::SQLite => new class extends Driver\AbstractSQLiteDriver
-            {
+            self::SQLite => new class() extends Driver\AbstractSQLiteDriver {
                 use ConnectsToDatabase;
             },
-            self::SqlServer => new class extends Driver\AbstractSQLServerDriver
-            {
+            self::SqlServer => new class() extends Driver\AbstractSQLServerDriver {
                 use ConnectsToDatabase;
             },
         };

@@ -1,0 +1,11 @@
+includes:
+    - ./vendor/worksome/coding-style/larastan.neon
+
+parameters:
+    paths:
+        - src
+
+    # The level 8 is the highest level
+    level: 5
+
+    treatPhpDocTypesAsCertain: false
