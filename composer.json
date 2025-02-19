@@ -5,16 +5,17 @@
     "require": {
         "php": "^8.2",
         "doctrine/dbal": "^3.5.1 || ^4.0",
-        "illuminate/console": "^10.0 || ^11.0",
-        "illuminate/database": "^10.0 | ^11.0",
-        "illuminate/support": "^10.0 || ^11.0",
-        "thecodingmachine/safe": "^2.5",
+        "illuminate/console": "^11.0",
+        "illuminate/database": "^11.0",
+        "illuminate/support": "^11.0",
+        "thecodingmachine/safe": "^2.5 || ^3.0",
         "worksome/foggy": "^0.6"
     },
     "require-dev": {
         "orchestra/testbench": "^8.21 || ^9.0",
-        "pestphp/pest": "^2.33",
-        "pestphp/pest-plugin-laravel": "^2.2"
+        "pestphp/pest": "^3.7",
+        "pestphp/pest-plugin-laravel": "^3.1",
+        "worksome/coding-style": "^3.1"
     },
     "autoload": {
         "psr-4": {
@@ -37,7 +38,9 @@
     "config": {
         "sort-packages": true,
         "allow-plugins": {
-            "pestphp/pest-plugin": true
+            "pestphp/pest-plugin": true,
+            "dealerdirect/phpcodesniffer-composer-installer": true,
+            "worksome/coding-style": true
         }
     },
     "extra": {

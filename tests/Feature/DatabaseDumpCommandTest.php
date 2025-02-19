@@ -5,7 +5,9 @@ declare(strict_types=1);
 use Worksome\FoggyLaravel\DatabaseDumpCommand;
 
 beforeEach(function () {
-    file_put_contents(base_path('foggy.json'), <<<'JSON'
+    file_put_contents(
+        base_path('foggy.json'),
+        <<<'JSON'
     {
         "database": {
             "*": {

@@ -52,6 +52,7 @@ class DatabaseDumpCommand extends Command
 
     private function getDoctrineConnection(): DoctrineConnection
     {
+        // @phpstan-ignore larastanStrictRules.noFacadeRule
         $connection = DB::connection($this->option('connection'));
 
         if (method_exists($connection, 'getDoctrineConnection')) {
