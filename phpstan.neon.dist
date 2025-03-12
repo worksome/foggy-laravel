@@ -1,11 +1,12 @@
 includes:
     - ./vendor/worksome/coding-style/larastan.neon
+    - phpstan-baseline.neon
 
 parameters:
+    level: 5
     paths:
         - src
-
-    # The level 8 is the highest level
-    level: 5
-
-    treatPhpDocTypesAsCertain: false
+    tmpDir: build/phpstan
+    checkModelProperties: true
+    parallel:
+            processTimeout: 300.0

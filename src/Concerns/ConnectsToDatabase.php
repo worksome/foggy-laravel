@@ -11,6 +11,7 @@ use PDO;
 
 trait ConnectsToDatabase
 {
+    /** @param array|array{pdo?: mixed} $params */
     public function connect(array $params): DriverConnection
     {
         if (! isset($params['pdo']) || ! $params['pdo'] instanceof PDO) {
