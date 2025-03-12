@@ -44,7 +44,7 @@ class DatabaseDumpCommand extends Command
             $this->getDoctrineConnection(),
             $configFile,
             $dumpOutput,
-            $consoleOutput
+            $consoleOutput // @phpstan-ignore argument.type
         );
 
         $process->run();

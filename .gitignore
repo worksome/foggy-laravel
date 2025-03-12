@@ -1,6 +1,15 @@
+/.idea
 /build
 /vendor
-/.phpunit.cache
-/.php-cs-fixer.cache
+/.php_cs.cache
 /composer.lock
 /phpunit.xml
+/phpstan.neon
+.php_cs
+.php_cs.cache
+.phpunit.cache
+.php-cs-fixer.cache
+coverage
+docs
+node_modules
+testbench.yaml
