@@ -52,12 +52,18 @@ final class UnscrubbedDataScanner
      *                                            than {@see self::DEFAULT_OVERLAP_BYTES}, or such
      *                                            a match could be missed on a chunk boundary
      *
-     * @throws InvalidArgumentException when a pattern will not compile
+     * @throws InvalidArgumentException when a pattern will not compile, or the overlap is negative
      */
     public function __construct(
         private readonly array $patterns = self::DEFAULT_PATTERNS,
         private readonly int $overlapBytes = self::DEFAULT_OVERLAP_BYTES,
     ) {
+        // A negative becomes a positive substr offset below, which would retain
+        // nearly the whole haystack on every chunk and grow without bound.
+        if ($overlapBytes < 0) {
+            throw new InvalidArgumentException('Scan overlap must not be negative.');
+        }
+
         foreach ($patterns as $label => $pattern) {
             // Fail closed, and fail now: a pattern that cannot compile makes
             // preg_match_all return false, which would silently stop checking
@@ -91,7 +97,8 @@ final class UnscrubbedDataScanner
             }
         }
 
-        $this->overlap = substr($haystack, -$this->overlapBytes);
+        // Not substr(-0): that is substr(0), i.e. keep everything.
+        $this->overlap = $this->overlapBytes === 0 ? '' : substr($haystack, -$this->overlapBytes);
     }
 
     /**

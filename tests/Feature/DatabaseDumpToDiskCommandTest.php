@@ -216,3 +216,28 @@ it('refuses to publish when the scan could not run over the whole dump', functio
     expect(Storage::disk('dumps')->files('dumps'))->toBe([])
         ->and(Storage::disk('dumps')->exists('dumps/latest'))->toBeFalse();
 });
+
+it('warns when the object it refuses to publish cannot be removed', function () {
+    $disk = Mockery::mock(Illuminate\Contracts\Filesystem\Filesystem::class);
+    $disk->shouldReceive('writeStream')->once()->andReturnUsing(function ($path, $resource) {
+        stream_get_contents($resource); // drain, as the real adapter would
+
+        return true;
+    });
+    // A write-only credential: Laravel reports and returns false rather than
+    // throwing, so silence here would leave a rejected dump sitting on the disk.
+    $disk->shouldReceive('delete')->once()->andReturnFalse();
+    $disk->shouldNotReceive('put');
+
+    $factory = Mockery::mock(Illuminate\Contracts\Filesystem\Factory::class);
+    $factory->shouldReceive('disk')->andReturn($disk);
+    Storage::swap($factory);
+
+    config(['foggy.scan_patterns' => ['charset marker' => '/utf8mb4/']]);
+    $this->app[Kernel::class]->registerCommand(new StubDumpToDiskCommand());
+
+    $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps'])
+        ->expectsOutputToContain('Could not remove')
+        ->expectsOutputToContain('lifecycle rule')
+        ->assertFailed();
+});

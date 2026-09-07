@@ -219,11 +219,19 @@ class DatabaseDumpToDiskCommand extends Command
     private function discard(Filesystem $disk, string $key): void
     {
         try {
-            $disk->delete($key);
+            // Refused deletes surface both ways: Laravel reports and returns
+            // false unless the disk sets 'throw' => true. Staying quiet on the
+            // false would leave a rejected dump on the disk unannounced.
+            if ($disk->delete($key)) {
+                return;
+            }
+
+            $this->warn("Could not remove {$key}.");
         } catch (Throwable $exception) {
             $this->warn("Could not remove {$key}: {$exception->getMessage()}");
-            $this->warn('Nothing points at it; rely on the bucket lifecycle rule to expire it.');
         }
+
+        $this->warn('Nothing points at it; rely on the bucket lifecycle rule to expire it.');
     }
 
     private function formatBytes(int $bytes): string

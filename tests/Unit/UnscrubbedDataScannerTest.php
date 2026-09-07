@@ -118,3 +118,21 @@ it('reports no errors for a scan that completes', function () {
 
     expect($scanner->errors())->toBe([]);
 });
+
+it('carries nothing between chunks when asked for no overlap', function () {
+    // substr($haystack, -0) is substr($haystack, 0) — the whole thing — so a
+    // zero overlap used to retain every chunk and grow without bound.
+    $scanner = new UnscrubbedDataScanner(overlapBytes: 0);
+
+    $scanner->scan('padding hidden@acme');
+    $scanner->scan("-corp.com');\n");
+
+    expect($scanner->findings())->toBe([]);
+});
+
+it('refuses a negative overlap', function () {
+    // A negative turns into a positive substr offset, which keeps almost the
+    // whole haystack on every chunk.
+    expect(fn () => new UnscrubbedDataScanner(overlapBytes: -1))
+        ->toThrow(InvalidArgumentException::class, 'overlap');
+});
