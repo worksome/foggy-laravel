@@ -5,7 +5,9 @@ declare(strict_types=1);
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\Storage;
+use League\Flysystem\UnableToWriteFile;
 use Worksome\FoggyLaravel\DatabaseDumpToDiskCommand;
+use Worksome\FoggyLaravel\Tests\Doubles\BinaryDumpToDiskCommand;
 use Worksome\FoggyLaravel\Tests\Doubles\FailingDumpToDiskCommand;
 use Worksome\FoggyLaravel\Tests\Doubles\StubDumpToDiskCommand;
 
@@ -23,7 +25,7 @@ it('uploads a gzipped dump and points latest at it', function () {
     $disk = Storage::disk('dumps');
     $pointer = trim($disk->get('dumps/latest'));
 
-    expect($pointer)->toMatch('#^dumps/dump-\d{4}-\d{2}-\d{2}-\d{6}\.sql\.gz$#')
+    expect($pointer)->toMatch('#^dumps/dump-\d{4}-\d{2}-\d{2}-\d{6}-[0-9a-f]{6}\.sql\.gz$#')
         ->and($disk->exists($pointer))->toBeTrue()
         ->and(gzdecode($disk->get($pointer)))->toBe(StubDumpToDiskCommand::PAYLOAD);
 });
@@ -47,15 +49,34 @@ it('refuses to publish a dump the scan objects to', function () {
 it('gives each run its own key so a retry cannot overwrite a published dump', function () {
     $this->app[Kernel::class]->registerCommand(new StubDumpToDiskCommand());
 
+    // Frozen, because a retry usually follows within the same second and that is
+    // exactly when a timestamp alone stops being unique.
+    $this->freezeTime();
+
     $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps'])->assertOk();
     $first = trim(Storage::disk('dumps')->get('dumps/latest'));
-
-    $this->travel(1)->second();
 
     $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps'])->assertOk();
 
     expect(trim(Storage::disk('dumps')->get('dumps/latest')))->not->toBe($first)
         ->and(Storage::disk('dumps')->exists($first))->toBeTrue();
+});
+
+it('does not delete a published dump when a same-second run is rejected', function () {
+    $this->app[Kernel::class]->registerCommand(new StubDumpToDiskCommand());
+    $this->freezeTime();
+
+    $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps'])->assertOk();
+    $published = trim(Storage::disk('dumps')->get('dumps/latest'));
+
+    // The second run trips the scan and discards its own object. Sharing a key
+    // with the first would make that discard delete the dump latest names.
+    config(['foggy.scan_patterns' => ['charset marker' => '/utf8mb4/']]);
+
+    $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps'])->assertFailed();
+
+    expect(Storage::disk('dumps')->exists($published))->toBeTrue()
+        ->and(trim(Storage::disk('dumps')->get('dumps/latest')))->toBe($published);
 });
 
 it('fails without publishing when the dump process errors', function () {
@@ -96,7 +117,7 @@ it('writes to the disk root when the prefix is empty', function () {
     $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps', '--prefix' => ''])->assertOk();
 
     // A leading slash breaks some adapters, so the key has to stay relative.
-    expect(trim(Storage::disk('dumps')->get('latest')))->toMatch('#^dump-[\d-]+\.sql\.gz$#');
+    expect(trim(Storage::disk('dumps')->get('latest')))->toMatch('#^dump-[\d-]+-[0-9a-f]{6}\.sql\.gz$#');
 });
 
 it('removes the object it refuses to publish', function () {
@@ -157,4 +178,41 @@ it('fails when the dump uploads but the pointer cannot be written', function () 
 
     // A dump that uploaded but is not advertised is a failure, not a success.
     $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps'])->assertFailed();
+});
+
+it('cleans up and fails when the upload throws instead of returning false', function () {
+    // What a disk configured with 'throw' => true does. Without a catch this
+    // skipped the discard and left the object behind, unscanned.
+    $disk = Mockery::mock(Illuminate\Contracts\Filesystem\Filesystem::class);
+    $disk->shouldReceive('writeStream')->once()->andReturnUsing(function ($path, $resource) {
+        stream_get_contents($resource); // drain, as the real adapter would
+
+        throw UnableToWriteFile::atLocation($path, 'denied');
+    });
+    $disk->shouldReceive('delete')->once()->andReturnTrue();
+    $disk->shouldNotReceive('put');
+
+    $factory = Mockery::mock(Illuminate\Contracts\Filesystem\Factory::class);
+    $factory->shouldReceive('disk')->andReturn($disk);
+    Storage::swap($factory);
+
+    $this->app[Kernel::class]->registerCommand(new StubDumpToDiskCommand());
+
+    $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps'])->assertFailed();
+});
+
+it('refuses to publish when the scan could not run over the whole dump', function () {
+    $this->app[Kernel::class]->registerCommand(new BinaryDumpToDiskCommand());
+
+    // Valid pattern, but /u against the dump's non-UTF-8 bytes fails at scan
+    // time. An unfinished scan is no basis for publishing.
+    config(['foggy.scan_patterns' => ['unicode word' => '/\p{L}+@acme/u']]);
+
+    $this->artisan(BinaryDumpToDiskCommand::class, ['--disk' => 'dumps'])
+        ->expectsOutputToContain('scan could not complete')
+        ->expectsOutputToContain('unicode word')
+        ->assertFailed();
+
+    expect(Storage::disk('dumps')->files('dumps'))->toBe([])
+        ->and(Storage::disk('dumps')->exists('dumps/latest'))->toBeFalse();
 });

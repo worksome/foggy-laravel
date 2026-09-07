@@ -39,6 +39,9 @@ final class UnscrubbedDataScanner
     /** @var array<string, int> */
     private array $findings = [];
 
+    /** @var array<string, string> */
+    private array $errors = [];
+
     private int $bytes = 0;
 
     private string $overlap = '';
@@ -74,6 +77,15 @@ final class UnscrubbedDataScanner
         foreach ($this->patterns as $label => $pattern) {
             $matches = preg_match_all($pattern, $haystack);
 
+            // A pattern that compiled can still fail here — a /u pattern meeting
+            // the non-UTF-8 bytes of a BLOB, or a backtrack limit. false is not
+            // "nothing found", so record it rather than letting it read as clean.
+            if ($matches === false) {
+                $this->errors[$label] = preg_last_error_msg();
+
+                continue;
+            }
+
             if ($matches > 0) {
                 $this->findings[$label] = ($this->findings[$label] ?? 0) + $matches;
             }
@@ -91,6 +103,17 @@ final class UnscrubbedDataScanner
     public function findings(): array
     {
         return $this->findings;
+    }
+
+    /**
+     * Pattern label => why that pattern stopped being applied. Non-empty means
+     * the dump was not fully checked, whatever {@see self::findings()} says.
+     *
+     * @return array<string, string>
+     */
+    public function errors(): array
+    {
+        return $this->errors;
     }
 
     /** Plaintext bytes seen, i.e. the uncompressed size of the dump. */

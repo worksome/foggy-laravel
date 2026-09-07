@@ -40,11 +40,17 @@ class DatabaseDumpToDiskCommand extends Command
         $prefix = trim((string) $this->option('prefix'), '/');
 
         /**
-         * Timestamped, not just dated. A same-day re-run must not overwrite an
-         * object that `latest` already points at, or a failure would replace a
-         * good dump with a truncated one while still being advertised as current.
+         * Timestamped and salted. A re-run must not reuse the key of an object
+         * `latest` already points at: the retry's own cleanup would delete the
+         * good dump. Seconds are not enough, because a retry usually lands in
+         * the same one.
          */
-        $key = $this->join($prefix, sprintf('%s-%s.sql.gz', $this->option('name'), now()->format('Y-m-d-His')));
+        $key = $this->join($prefix, sprintf(
+            '%s-%s-%s.sql.gz',
+            $this->option('name'),
+            now()->format('Y-m-d-His'),
+            bin2hex(random_bytes(3)),
+        ));
 
         /** @var array<string, string>|null $patterns */
         $patterns = config('foggy.scan_patterns');
@@ -76,9 +82,9 @@ class DatabaseDumpToDiskCommand extends Command
             stream_filter_append($pipes[1], 'zlib.deflate', STREAM_FILTER_READ, ['level' => 6, 'window' => 31]);
 
             // Returns false rather than throwing unless the disk sets
-            // 'throw' => true, and a package cannot assume a consumer's config.
-            // Ignoring it would publish a pointer to an object that was never
-            // stored — the exact thing the pointer exists to prevent.
+            // 'throw' => true, so both outcomes are handled: the check below and
+            // the catch. Ignoring either would publish a pointer to an object
+            // that was never stored — the exact thing the pointer exists to prevent.
             $written = $disk->writeStream($key, $pipes[1]);
 
             fclose($pipes[1]);
@@ -104,6 +110,20 @@ class DatabaseDumpToDiskCommand extends Command
                 return self::FAILURE;
             }
 
+            if (($errors = UnscrubbedDataFilter::scanner()->errors()) !== []) {
+                $this->error('The unscrubbed-data scan could not complete — not publishing the dump:');
+
+                foreach ($errors as $label => $reason) {
+                    $this->error("  {$label}: {$reason}");
+                }
+
+                $this->error('Fix the pattern in the Foggy config, then re-run.');
+
+                $this->discard($disk, $key);
+
+                return self::FAILURE;
+            }
+
             if (($findings = UnscrubbedDataFilter::scanner()->findings()) !== []) {
                 $this->error('Unscrubbed personal data found in the dump — not publishing it:');
 
@@ -117,9 +137,18 @@ class DatabaseDumpToDiskCommand extends Command
 
                 return self::FAILURE;
             }
+        } catch (Throwable $exception) {
+            // A disk configured with 'throw' => true raises instead of returning
+            // false, which would otherwise skip the cleanup below and leave an
+            // unscanned object on the disk.
+            $this->error("Dumping to [{$key}] failed: {$exception->getMessage()}");
+
+            $this->discard($disk, $key);
+
+            return self::FAILURE;
         } finally {
-            // Whatever happened — including writeStream throwing — do not leave
-            // a child process, a pipe or the temp file behind.
+            // Whatever happened, do not leave a child process, a pipe or the
+            // temp file behind.
             if (isset($pipes[1]) && is_resource($pipes[1])) {
                 fclose($pipes[1]);
             }

@@ -48,13 +48,14 @@ php artisan db:dump-to-disk --disk=dumps --connection=replica
 
 It writes two objects:
 
-- `dumps/dump-YYYY-MM-DD-HHMMSS.sql.gz`, the dump itself
+- `dumps/dump-YYYY-MM-DD-HHMMSS-xxxxxx.sql.gz`, the dump itself
 - `dumps/latest`, naming the most recent **complete** dump
 
-Read the pointer rather than guessing a filename. Keys are timestamped so a
-re-run never overwrites a published dump, and `latest` is only written after the
-dump has finished and passed the scan below — so a truncated or rejected dump is
-never the one consumers pull.
+Read the pointer rather than guessing a filename. Keys carry a timestamp and a
+random suffix, so a re-run never reuses the key of a published dump even when it
+starts in the same second, and `latest` is only written after the dump has
+finished and passed the scan below — so a truncated or rejected dump is never the
+one consumers pull.
 
 Options: `--disk`, `--prefix` (default `dumps`), `--name` (default `dump`),
 plus `--connection` and `--config`, which are passed through to `db:dump`.
@@ -94,3 +95,6 @@ new UnscrubbedDataScanner($patterns, overlapBytes: 1024);
 
 Patterns are validated when the scanner is constructed — one that will not
 compile raises `InvalidArgumentException` rather than silently matching nothing.
+A pattern that compiles but then fails mid-dump, such as a `/u` pattern meeting
+the non-UTF-8 bytes of a BLOB column, fails the run too: an unfinished scan is
+not evidence that the dump is clean.

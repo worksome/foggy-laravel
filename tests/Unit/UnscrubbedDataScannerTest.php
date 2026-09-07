@@ -99,3 +99,22 @@ it('lets a project widen the overlap for a longer custom pattern', function () {
     expect($narrow->findings())->toBe([])
         ->and($wide->findings())->toHaveKey('long token');
 });
+
+it('records a pattern that fails partway through a scan, instead of reading it as clean', function () {
+    // Compiles, so the constructor check passes, but /u against invalid UTF-8
+    // makes preg_match_all return false — which used to tally as no matches.
+    $scanner = new UnscrubbedDataScanner(['unicode word' => '/\p{L}+@acme/u']);
+
+    $scanner->scan("\xC3\x28 someone@acme");
+
+    expect($scanner->errors())->toHaveKey('unicode word')
+        ->and($scanner->findings())->toBe([]);
+});
+
+it('reports no errors for a scan that completes', function () {
+    $scanner = new UnscrubbedDataScanner();
+
+    $scanner->scan("nothing to see here\n");
+
+    expect($scanner->errors())->toBe([]);
+});
