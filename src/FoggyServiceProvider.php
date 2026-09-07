@@ -13,6 +13,7 @@ class FoggyServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 DatabaseDumpCommand::class,
+                DatabaseDumpToDiskCommand::class,
             ]);
         }
     }
