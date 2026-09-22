@@ -14,6 +14,6 @@ final class FailingDumpToDiskCommand extends DatabaseDumpToDiskCommand
     /** @return list<string> */
     protected function dumpCommand(): array
     {
-        return ['sh', '-c', 'echo "SET NAMES utf8mb4 ;"; echo "something broke" >&2; exit 3'];
+        return [PHP_BINARY, '-r', 'echo "SET NAMES utf8mb4 ;\n"; fwrite(STDERR, "something broke\n"); exit(3);'];
     }
 }

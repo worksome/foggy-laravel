@@ -10,6 +10,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use RuntimeException;
 use Throwable;
 
+use function Safe\stream_filter_append;
 use function Safe\tempnam;
 use function Safe\unlink;
 
