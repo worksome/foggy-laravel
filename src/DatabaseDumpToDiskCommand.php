@@ -101,6 +101,13 @@ class DatabaseDumpToDiskCommand extends Command
                 return self::FAILURE;
             }
 
+            // Before the write result: a rejected scan aborts the write, which reads as a failed upload.
+            if (! $this->scanPassed()) {
+                $this->discard($disk, $key);
+
+                return self::FAILURE;
+            }
+
             if ($written === false) {
                 $this->error("Unable to write the dump to [{$key}].");
                 $this->error("Check the disk's credentials and permissions.");
@@ -109,39 +116,11 @@ class DatabaseDumpToDiskCommand extends Command
 
                 return self::FAILURE;
             }
-
-            if (($errors = UnscrubbedDataFilter::scanner()->errors()) !== []) {
-                $this->error('The unscrubbed-data scan could not complete — not publishing the dump:');
-
-                foreach ($errors as $label => $reason) {
-                    $this->error("  {$label}: {$reason}");
-                }
-
-                $this->error('Fix the pattern in the Foggy config, then re-run.');
-
-                $this->discard($disk, $key);
-
-                return self::FAILURE;
-            }
-
-            if (($findings = UnscrubbedDataFilter::scanner()->findings()) !== []) {
-                $this->error('Unscrubbed personal data found in the dump — not publishing it:');
-
-                foreach ($findings as $label => $count) {
-                    $this->error("  {$label}: {$count} match(es)");
-                }
-
-                $this->error('Add rules to the Foggy config for the offending columns, then re-run.');
-
-                $this->discard($disk, $key);
-
-                return self::FAILURE;
-            }
         } catch (Throwable $exception) {
-            // A disk configured with 'throw' => true raises instead of returning
-            // false, which would otherwise skip the cleanup below and leave an
-            // unscanned object on the disk.
-            $this->error("Dumping to [{$key}] failed: {$exception->getMessage()}");
+            // Reached by a disk set to 'throw' => true, and by the scan filter aborting the write.
+            if ($this->scanPassed()) {
+                $this->error("Dumping to [{$key}] failed: {$exception->getMessage()}");
+            }
 
             $this->discard($disk, $key);
 
@@ -208,6 +187,36 @@ class DatabaseDumpToDiskCommand extends Command
     private function join(string $prefix, string $name): string
     {
         return $prefix === '' ? $name : "{$prefix}/{$name}";
+    }
+
+    /** Reports why the scan rejects the dump, if it does. */
+    private function scanPassed(): bool
+    {
+        if (($errors = UnscrubbedDataFilter::scanner()->errors()) !== []) {
+            $this->error('The unscrubbed-data scan could not complete — not publishing the dump:');
+
+            foreach ($errors as $label => $reason) {
+                $this->error("  {$label}: {$reason}");
+            }
+
+            $this->error('Fix the pattern in the Foggy config, then re-run.');
+
+            return false;
+        }
+
+        if (($findings = UnscrubbedDataFilter::scanner()->findings()) !== []) {
+            $this->error('Unscrubbed personal data found in the dump — not publishing it:');
+
+            foreach ($findings as $label => $count) {
+                $this->error("  {$label}: {$count} match(es)");
+            }
+
+            $this->error('Add rules to the Foggy config for the offending columns, then re-run.');
+
+            return false;
+        }
+
+        return true;
     }
 
     /**

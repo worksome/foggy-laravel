@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Worksome\FoggyLaravel;
 
 use php_user_filter;
+use RuntimeException;
 
 /**
  * Stream filter that feeds a dump through {@see UnscrubbedDataScanner}.
@@ -56,6 +57,11 @@ final class UnscrubbedDataFilter extends php_user_filter
 
             stream_bucket_append($out, $bucket);
             $passed = true;
+        }
+
+        // Failing the final read stops the disk completing the object, so a rejected dump is never stored.
+        if ($closing && (self::scanner()->findings() !== [] || self::scanner()->errors() !== [])) {
+            throw new RuntimeException('The unscrubbed-data scan rejected the dump.');
         }
 
         // On the closing call there are no buckets left, but answering

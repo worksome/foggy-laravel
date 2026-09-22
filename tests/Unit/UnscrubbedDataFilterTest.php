@@ -35,9 +35,17 @@ it('passes the payload through intact and still produces valid gzip', function (
 });
 
 it('surfaces findings from the payload it compressed', function () {
-    pipe("INSERT INTO `notes` VALUES ('mail jane.doe@acme-corp.com');\n");
+    expect(fn () => pipe("INSERT INTO `notes` VALUES ('mail jane.doe@acme-corp.com');\n"))
+        ->toThrow(RuntimeException::class, 'rejected the dump');
 
     expect(UnscrubbedDataFilter::scanner()->findings())->toHaveKey('email address');
+});
+
+it('fails the final read once the whole payload has been scanned', function () {
+    $payload = str_repeat("INSERT INTO `things` VALUES ('a', 'b');\n", 5000) . "('jane.doe@acme-corp.com');\n";
+
+    expect(fn () => pipe($payload))->toThrow(RuntimeException::class, 'rejected the dump')
+        ->and(UnscrubbedDataFilter::scanner()->bytes())->toBe(strlen($payload));
 });
 
 it('can be registered repeatedly without losing the filter', function () {

@@ -42,8 +42,63 @@ it('refuses to publish a dump the scan objects to', function () {
         ->expectsOutputToContain('charset marker')
         ->assertFailed();
 
-    // The object was uploaded, but nothing advertises it as current.
     expect(Storage::disk('dumps')->exists('dumps/latest'))->toBeFalse();
+});
+
+it('aborts the write of a dump the scan objects to, so the disk never completes it', function () {
+    $completed = false;
+
+    // Like S3: the object only exists once the stream has been read to a clean end.
+    $disk = Mockery::mock(Illuminate\Contracts\Filesystem\Filesystem::class);
+    $disk->shouldReceive('writeStream')->once()->andReturnUsing(function ($path, $resource) use (&$completed) {
+        stream_get_contents($resource);
+        $completed = true;
+
+        return true;
+    });
+    $disk->shouldReceive('delete')->once()->andReturnFalse();
+    $disk->shouldNotReceive('put');
+
+    $factory = Mockery::mock(Illuminate\Contracts\Filesystem\Factory::class);
+    $factory->shouldReceive('disk')->andReturn($disk);
+    Storage::swap($factory);
+
+    config(['foggy.scan_patterns' => ['charset marker' => '/utf8mb4/']]);
+    $this->app[Kernel::class]->registerCommand(new StubDumpToDiskCommand());
+
+    $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps'])
+        ->expectsOutputToContain('Unscrubbed personal data found')
+        ->assertFailed();
+
+    expect($completed)->toBeFalse();
+});
+
+it('reports the scan rather than a failed upload when the disk swallows the abort', function () {
+    // What the S3 adapter does on a disk without 'throw' => true.
+    $disk = Mockery::mock(Illuminate\Contracts\Filesystem\Filesystem::class);
+    $disk->shouldReceive('writeStream')->once()->andReturnUsing(function ($path, $resource) {
+        try {
+            stream_get_contents($resource);
+        } catch (RuntimeException) {
+            return false;
+        }
+
+        return true;
+    });
+    $disk->shouldReceive('delete')->once()->andReturnTrue();
+    $disk->shouldNotReceive('put');
+
+    $factory = Mockery::mock(Illuminate\Contracts\Filesystem\Factory::class);
+    $factory->shouldReceive('disk')->andReturn($disk);
+    Storage::swap($factory);
+
+    config(['foggy.scan_patterns' => ['charset marker' => '/utf8mb4/']]);
+    $this->app[Kernel::class]->registerCommand(new StubDumpToDiskCommand());
+
+    $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps'])
+        ->expectsOutputToContain('Unscrubbed personal data found')
+        ->doesntExpectOutputToContain('Unable to write the dump')
+        ->assertFailed();
 });
 
 it('gives each run its own key so a retry cannot overwrite a published dump', function () {

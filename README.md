@@ -67,7 +67,10 @@ table that is already `withData: true` is dumped raw, and neither the config nor
 the schema reveals that.
 
 So the upload scans its own output, and fails without writing `latest` if it
-finds anything. The defaults look for email addresses, IBANs and Danish CPR
+finds anything. A rejected dump fails the final read of the stream, so a disk
+that only stores an object once its stream ends cleanly — S3, for one — never
+stores it, and a write-only credential needs no delete permission to stay safe.
+The defaults look for email addresses, IBANs and Danish CPR
 numbers — deliberately a short, high-confidence list, because a scan that cries
 wolf gets switched off. Replace them per project:
 
