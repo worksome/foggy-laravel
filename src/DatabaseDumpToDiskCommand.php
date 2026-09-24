@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use Illuminate\Contracts\Filesystem\Factory as FilesystemFactory;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use RuntimeException;
+use Safe\Exceptions\FilesystemException;
 use Throwable;
 
 use function Safe\stream_filter_append;
@@ -55,7 +56,10 @@ class DatabaseDumpToDiskCommand extends Command
 
         /** @var array<string, string>|null $patterns */
         $patterns = config('foggy.scan_patterns');
-        UnscrubbedDataFilter::register($patterns);
+        UnscrubbedDataFilter::register(
+            $patterns,
+            (int) config('foggy.scan_overlap_bytes', UnscrubbedDataScanner::DEFAULT_OVERLAP_BYTES),
+        );
 
         $this->info("Dumping to {$key}...");
         $startedAt = microtime(true);
@@ -138,8 +142,12 @@ class DatabaseDumpToDiskCommand extends Command
                 proc_close($process);
             }
 
-            if (file_exists($progressLog)) {
-                unlink($progressLog);
+            // Best effort: a throw from finally would replace the run's own outcome.
+            try {
+                if (file_exists($progressLog)) {
+                    unlink($progressLog);
+                }
+            } catch (FilesystemException) {
             }
         }
 

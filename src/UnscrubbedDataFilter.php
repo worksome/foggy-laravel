@@ -30,14 +30,17 @@ final class UnscrubbedDataFilter extends php_user_filter
      *
      * @param array<string, string>|null $patterns Label => regex
      */
-    public static function register(array|null $patterns = null): void
-    {
+    public static function register(
+        array|null $patterns = null,
+        int $overlapBytes = UnscrubbedDataScanner::DEFAULT_OVERLAP_BYTES,
+    ): void {
         if (! in_array(self::NAME, stream_get_filters(), true)) {
             stream_filter_register(self::NAME, self::class);
         }
 
         self::$scanner = new UnscrubbedDataScanner(
             $patterns === null || $patterns === [] ? UnscrubbedDataScanner::DEFAULT_PATTERNS : $patterns,
+            $overlapBytes,
         );
     }
 

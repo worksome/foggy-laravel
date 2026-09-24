@@ -45,6 +45,16 @@ it('refuses to publish a dump the scan objects to', function () {
     expect(Storage::disk('dumps')->exists('dumps/latest'))->toBeFalse();
 });
 
+it('passes the configured scan overlap to the scanner', function () {
+    $this->app[Kernel::class]->registerCommand(new StubDumpToDiskCommand());
+
+    // Only a value the scanner rejects makes the wiring observable from here.
+    config(['foggy.scan_overlap_bytes' => -1]);
+
+    expect(fn () => $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps'])->run())
+        ->toThrow(InvalidArgumentException::class, 'Scan overlap must not be negative.');
+});
+
 it('aborts the write of a dump the scan objects to, so the disk never completes it', function () {
     $completed = false;
 

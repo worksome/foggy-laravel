@@ -93,7 +93,10 @@ straddling a chunk boundary. The defaults are well inside it (an email address
 caps out at 254 characters). If you add something longer, widen the window:
 
 ```php
-new UnscrubbedDataScanner($patterns, overlapBytes: 1024);
+// config/foggy.php
+return [
+    'scan_overlap_bytes' => 1024,
+];
 ```
 
 Patterns are validated when the scanner is constructed — one that will not
