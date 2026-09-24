@@ -245,6 +245,27 @@ it('fails when the dump uploads but the pointer cannot be written', function () 
     $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps'])->assertFailed();
 });
 
+it('fails cleanly, keeping the dump, when the pointer write throws', function () {
+    $disk = Mockery::mock(Illuminate\Contracts\Filesystem\Filesystem::class);
+    $disk->shouldReceive('writeStream')->once()->andReturnUsing(function ($path, $resource) {
+        stream_get_contents($resource); // drain, as the real adapter would
+
+        return true;
+    });
+    $disk->shouldReceive('put')->once()->andThrow(UnableToWriteFile::atLocation('dumps/latest', 'denied'));
+    $disk->shouldNotReceive('delete');
+
+    $factory = Mockery::mock(Illuminate\Contracts\Filesystem\Factory::class);
+    $factory->shouldReceive('disk')->andReturn($disk);
+    Storage::swap($factory);
+
+    $this->app[Kernel::class]->registerCommand(new StubDumpToDiskCommand());
+
+    $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps'])
+        ->expectsOutputToContain('could not be updated')
+        ->assertFailed();
+});
+
 it('cleans up and fails when the upload throws instead of returning false', function () {
     // What a disk configured with 'throw' => true does. Without a catch this
     // skipped the discard and left the object behind, unscanned.

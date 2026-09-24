@@ -152,7 +152,17 @@ class DatabaseDumpToDiskCommand extends Command
         }
 
         // Written last, so it can only ever name a complete, scanned dump.
-        if ($disk->put($pointer = $this->join($prefix, 'latest'), $key . "\n") === false) {
+        $pointer = $this->join($prefix, 'latest');
+
+        try {
+            $published = $disk->put($pointer, $key . "\n");
+        } catch (Throwable $exception) {
+            $published = false;
+            $this->error($exception->getMessage());
+        }
+
+        // The dump is kept: it is complete and scanned, so it can still be published by hand.
+        if ($published === false) {
             $this->error("Dump uploaded to {$key}, but [{$pointer}] could not be updated.");
 
             return self::FAILURE;
