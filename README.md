@@ -70,6 +70,9 @@ So the upload scans its own output, and fails without writing `latest` if it
 finds anything. A rejected dump fails the final read of the stream, so a disk
 that only stores an object once its stream ends cleanly — S3, for one — never
 stores it, and a write-only credential needs no delete permission to stay safe.
+One caveat: a dump large enough for a multipart upload leaves its uploaded parts
+behind, since the AWS SDK does not abort the upload — give the bucket an
+`AbortIncompleteMultipartUpload` lifecycle rule so they expire.
 The defaults look for email addresses, IBANs and Danish CPR
 numbers — deliberately a short, high-confidence list, because a scan that cries
 wolf gets switched off. Replace them per project:
