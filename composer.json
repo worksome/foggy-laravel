@@ -9,7 +9,7 @@
         "illuminate/database": "^12.0 || ^13.0",
         "illuminate/support": "^12.0 || ^13.0",
         "thecodingmachine/safe": "^3.0",
-        "worksome/foggy": "^0.6.6"
+        "worksome/foggy": "^0.7.1"
     },
     "require-dev": {
         "nunomaduro/collision": "^8.1.1",
