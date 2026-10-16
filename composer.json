@@ -13,6 +13,8 @@
         "worksome/foggy": "^0.7.1"
     },
     "require-dev": {
+        "aws/aws-sdk-php": "^3.401",
+        "league/flysystem-aws-s3-v3": "^3.35",
         "nunomaduro/collision": "^8.1.1",
         "orchestra/testbench": "^10.1 || ^11.0",
         "pestphp/pest": "^4.4",

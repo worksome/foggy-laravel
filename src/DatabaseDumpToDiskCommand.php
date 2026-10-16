@@ -69,6 +69,7 @@ class DatabaseDumpToDiskCommand extends Command
         $progressLog = tempnam(sys_get_temp_dir(), 'foggy-dump-');
         $process = null;
         $pipes = [];
+        $upload = null;
 
         try {
             $process = proc_open(
@@ -90,24 +91,35 @@ class DatabaseDumpToDiskCommand extends Command
             // 'throw' => true, so both outcomes are handled: the check below and
             // the catch. Ignoring either would publish a pointer to an object
             // that was never stored — the exact thing the pointer exists to prevent.
-            $written = $disk->writeStream($key, $pipes[1]);
+            $upload = ForwardOnlyStream::wrap($pipes[1]);
+            $written = $disk->writeStream($key, $upload);
+            $drained = feof($pipes[1]);
 
             fclose($pipes[1]);
             $exitCode = proc_close($process);
             $process = null;
 
-            if ($exitCode !== 0) {
-                $this->error("db:dump exited with {$exitCode}. Last output:");
-                // Not a negative offset: seeking past the start of a short file fails.
-                $this->line(substr((string) file_get_contents($progressLog), -2000));
+            // First: a rejected scan aborts the read, which would otherwise look like a short read or failed upload.
+            if (! $this->scanPassed()) {
+                $this->discard($disk, $key);
+
+                return self::FAILURE;
+            }
+
+            // The scan only vouches for the bytes it saw. Checked before the exit code, as a short read kills the child.
+            if (! $drained) {
+                $this->error("The upload of [{$key}] stopped before the end of the dump.");
 
                 $this->discard($disk, $key);
 
                 return self::FAILURE;
             }
 
-            // Before the write result: a rejected scan aborts the write, which reads as a failed upload.
-            if (! $this->scanPassed()) {
+            if ($exitCode !== 0) {
+                $this->error("db:dump exited with {$exitCode}. Last output:");
+                // Not a negative offset: seeking past the start of a short file fails.
+                $this->line(substr((string) file_get_contents($progressLog), -2000));
+
                 $this->discard($disk, $key);
 
                 return self::FAILURE;
@@ -133,6 +145,10 @@ class DatabaseDumpToDiskCommand extends Command
         } finally {
             // Whatever happened, do not leave a child process, a pipe or the
             // temp file behind.
+            if (is_resource($upload)) {
+                fclose($upload);
+            }
+
             if (isset($pipes[1]) && is_resource($pipes[1])) {
                 fclose($pipes[1]);
             }
