@@ -389,7 +389,7 @@ it('streams a dump over 5 MB to S3 as a multipart upload', function () {
     fakeS3Disk($mock);
     // Random bytes would trip the default patterns by chance.
     config(['foggy.scan_patterns' => ['never' => '/(?!)/']]);
-    $this->app[Kernel::class]->registerCommand(new LargeDumpToDiskCommand());
+    $this->app[Kernel::class]->registerCommand($command = new LargeDumpToDiskCommand());
 
     $this->artisan(LargeDumpToDiskCommand::class, ['--disk' => 's3-dumps'])
         ->doesntExpectOutputToContain('failed')
@@ -399,7 +399,7 @@ it('streams a dump over 5 MB to S3 as a multipart upload', function () {
     ksort($parts);
 
     expect($calls)->toBe(['CreateMultipartUpload', 'UploadPart', 'UploadPart', 'CompleteMultipartUpload', 'PutObject'])
-        ->and(gzdecode(implode('', $parts)))->toBe(LargeDumpToDiskCommand::payload());
+        ->and(gzdecode(implode('', $parts)))->toBe($command->payload());
 });
 
 it('never sends S3 a dump the scan objects to', function () {
@@ -420,4 +420,49 @@ it('never sends S3 a dump the scan objects to', function () {
 
     // Only the best-effort cleanup reaches S3.
     expect($calls)->toBe(['DeleteObject']);
+});
+
+it('does not publish a dump the disk stopped reading before the end', function () {
+    // A disk that reports success after a short read would otherwise publish a truncated dump.
+    $disk = Mockery::mock(Illuminate\Contracts\Filesystem\Filesystem::class);
+    $disk->shouldReceive('writeStream')->once()->andReturnUsing(function ($path, $resource) {
+        fread($resource, 1);
+
+        return true;
+    });
+    $disk->shouldReceive('delete')->once()->andReturnTrue();
+    $disk->shouldNotReceive('put');
+
+    $factory = Mockery::mock(Illuminate\Contracts\Filesystem\Factory::class);
+    $factory->shouldReceive('disk')->andReturn($disk);
+    Storage::swap($factory);
+
+    config(['foggy.scan_patterns' => ['never' => '/(?!)/']]);
+    $this->app[Kernel::class]->registerCommand(new LargeDumpToDiskCommand());
+
+    $this->artisan(LargeDumpToDiskCommand::class, ['--disk' => 'dumps'])
+        ->expectsOutputToContain('stopped before the end of the dump')
+        ->assertFailed();
+});
+
+it('never completes a multipart upload when the scan finds data past the first 5 MB', function () {
+    $calls = [];
+    $record = function (CommandInterface $command) use (&$calls) {
+        $calls[] = $command->getName();
+
+        return new Result(['UploadId' => 'upload-1', 'ETag' => '"etag"']);
+    };
+
+    // Enough for every call a completed upload would make, so a missing one cannot hide a completion.
+    fakeS3Disk(new MockHandler(array_fill(0, 8, $record)));
+    config(['foggy.scan_patterns' => ['secret marker' => '/FOGGY-SECRET-\\d+/']]);
+    $this->app[Kernel::class]->registerCommand(new LargeDumpToDiskCommand("\nFOGGY-SECRET-42\n"));
+
+    $this->artisan(LargeDumpToDiskCommand::class, ['--disk' => 's3-dumps'])
+        ->expectsOutputToContain('Unscrubbed personal data found')
+        ->assertFailed();
+
+    expect($calls)->toContain('CreateMultipartUpload')
+        ->not->toContain('CompleteMultipartUpload')
+        ->not->toContain('PutObject');
 });

@@ -62,7 +62,12 @@ final class ForwardOnlyStream
 
     public function stream_read(int $count): string|false
     {
-        return fread($this->inner, max(1, $count));
+        // Filters can yield nothing mid-stream; an empty read must only ever mean EOF.
+        do {
+            $chunk = fread($this->inner, max(1, $count));
+        } while ($chunk === '' && ! feof($this->inner));
+
+        return $chunk;
     }
 
     public function stream_eof(): bool
