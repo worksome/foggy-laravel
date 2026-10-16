@@ -41,6 +41,8 @@ php artisan db:dump --connection mysql
 filesystem disk. Nothing is written to local disk on the way, so it works in a
 container with no spare space — which starts to matter once a dump is tens of
 gigabytes.
+Its size is not known up front, so on S3 a dump of 5 MB or more goes up as a
+multipart upload and a smaller one as a single `PutObject`.
 
 ```shell
 php artisan db:dump-to-disk --disk=dumps --connection=replica

@@ -69,6 +69,7 @@ class DatabaseDumpToDiskCommand extends Command
         $progressLog = tempnam(sys_get_temp_dir(), 'foggy-dump-');
         $process = null;
         $pipes = [];
+        $upload = null;
 
         try {
             $process = proc_open(
@@ -90,7 +91,8 @@ class DatabaseDumpToDiskCommand extends Command
             // 'throw' => true, so both outcomes are handled: the check below and
             // the catch. Ignoring either would publish a pointer to an object
             // that was never stored — the exact thing the pointer exists to prevent.
-            $written = $disk->writeStream($key, $pipes[1]);
+            $upload = ForwardOnlyStream::wrap($pipes[1]);
+            $written = $disk->writeStream($key, $upload);
 
             fclose($pipes[1]);
             $exitCode = proc_close($process);
@@ -133,6 +135,10 @@ class DatabaseDumpToDiskCommand extends Command
         } finally {
             // Whatever happened, do not leave a child process, a pipe or the
             // temp file behind.
+            if (is_resource($upload)) {
+                fclose($upload);
+            }
+
             if (isset($pipes[1]) && is_resource($pipes[1])) {
                 fclose($pipes[1]);
             }

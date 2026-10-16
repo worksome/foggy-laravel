@@ -2,13 +2,18 @@
 
 declare(strict_types=1);
 
+use Aws\CommandInterface;
+use Aws\MockHandler;
+use Aws\Result;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\UnableToWriteFile;
+use Psr\Http\Message\RequestInterface;
 use Worksome\FoggyLaravel\DatabaseDumpToDiskCommand;
 use Worksome\FoggyLaravel\Tests\Doubles\BinaryDumpToDiskCommand;
 use Worksome\FoggyLaravel\Tests\Doubles\FailingDumpToDiskCommand;
+use Worksome\FoggyLaravel\Tests\Doubles\LargeDumpToDiskCommand;
 use Worksome\FoggyLaravel\Tests\Doubles\StubDumpToDiskCommand;
 
 beforeEach(fn () => Storage::fake('dumps'));
@@ -326,4 +331,93 @@ it('warns when the object it refuses to publish cannot be removed', function () 
         ->expectsOutputToContain('Could not remove')
         ->expectsOutputToContain('lifecycle rule')
         ->assertFailed();
+});
+
+/** A real S3 client on a mock transport, so the SDK's middleware (checksums included) still runs. */
+function fakeS3Disk(MockHandler $mock): void
+{
+    config(['filesystems.disks.s3-dumps' => [
+        'driver' => 's3',
+        'key' => 'key',
+        'secret' => 'secret',
+        'region' => 'eu-west-1',
+        'bucket' => 'dumps',
+        'throw' => true,
+        'handler' => $mock,
+    ]]);
+}
+
+it('streams a small dump to S3 in a single PutObject', function () {
+    $requests = [];
+    $record = function (CommandInterface $command, RequestInterface $request) use (&$requests) {
+        $requests[] = [$command->getName(), $command['Key'], (string) $request->getBody()];
+
+        return new Result();
+    };
+
+    $mock = new MockHandler([$record, $record]);
+    fakeS3Disk($mock);
+    $this->app[Kernel::class]->registerCommand(new StubDumpToDiskCommand());
+
+    $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 's3-dumps'])
+        ->doesntExpectOutputToContain('failed')
+        ->expectsOutputToContain('db-dump complete')
+        ->assertOk();
+
+    [$dump, $pointer] = $requests;
+
+    expect($dump[0])->toBe('PutObject')
+        ->and(gzdecode($dump[2]))->toBe(StubDumpToDiskCommand::PAYLOAD)
+        ->and($pointer)->toBe(['PutObject', 'dumps/latest', $dump[1] . "\n"])
+        ->and($mock->count())->toBe(0);
+});
+
+it('streams a dump over 5 MB to S3 as a multipart upload', function () {
+    $calls = [];
+    $parts = [];
+    $record = function (CommandInterface $command, RequestInterface $request) use (&$calls, &$parts) {
+        $calls[] = $command->getName();
+
+        if ($command->getName() === 'UploadPart') {
+            $parts[$command['PartNumber']] = (string) $request->getBody();
+        }
+
+        return new Result(['UploadId' => 'upload-1', 'ETag' => '"etag"']);
+    };
+
+    $mock = new MockHandler(array_fill(0, 5, $record));
+    fakeS3Disk($mock);
+    // Random bytes would trip the default patterns by chance.
+    config(['foggy.scan_patterns' => ['never' => '/(?!)/']]);
+    $this->app[Kernel::class]->registerCommand(new LargeDumpToDiskCommand());
+
+    $this->artisan(LargeDumpToDiskCommand::class, ['--disk' => 's3-dumps'])
+        ->doesntExpectOutputToContain('failed')
+        ->expectsOutputToContain('db-dump complete')
+        ->assertOk();
+
+    ksort($parts);
+
+    expect($calls)->toBe(['CreateMultipartUpload', 'UploadPart', 'UploadPart', 'CompleteMultipartUpload', 'PutObject'])
+        ->and(gzdecode(implode('', $parts)))->toBe(LargeDumpToDiskCommand::payload());
+});
+
+it('never sends S3 a dump the scan objects to', function () {
+    $calls = [];
+    $record = function (CommandInterface $command) use (&$calls) {
+        $calls[] = $command->getName();
+
+        return new Result();
+    };
+
+    fakeS3Disk(new MockHandler([$record]));
+    config(['foggy.scan_patterns' => ['charset marker' => '/utf8mb4/']]);
+    $this->app[Kernel::class]->registerCommand(new StubDumpToDiskCommand());
+
+    $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 's3-dumps'])
+        ->expectsOutputToContain('Unscrubbed personal data found')
+        ->assertFailed();
+
+    // Only the best-effort cleanup reaches S3.
+    expect($calls)->toBe(['DeleteObject']);
 });
