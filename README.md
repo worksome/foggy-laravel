@@ -93,7 +93,7 @@ The patterns are replaced, not merged, so a default that is noisy against your
 data can simply be dropped.
 
 The scan only looks at whole lines, so a match is never split or invented by a
-chunk boundary. A single line longer than 64 MB is the exception: it is scanned
+chunk boundary. A single line longer than 64 KB is the exception: it is scanned
 in pieces, with 256 bytes carried between them, so a pattern that can match more
 than that could miss an occurrence there. The defaults are well inside it (an
 email address caps out at 254 characters). If you add something longer, widen

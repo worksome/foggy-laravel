@@ -24,7 +24,7 @@ final class UnscrubbedDataScanner
      * with the `foggy.scan_patterns` config key.
      */
     public const DEFAULT_PATTERNS = [
-        'email address' => '/[\w.%+-]+@(?!example\.(?:org|com|net)(?![a-z]))[\w-]+\.[a-z]{2,}/i',
+        'email address' => '/[\w.%+-]+@(?!example\.(?:org|com|net)(?![a-z]|\d[\w-]*\.[a-z]))[\w-]+\.[a-z]{2,}/i',
         'IBAN' => '/\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){3,7}\b/',
         'Danish CPR number' => '/\b\d{6}-\d{4}\b/',
     ];
@@ -35,8 +35,8 @@ final class UnscrubbedDataScanner
      */
     public const DEFAULT_OVERLAP_BYTES = 256;
 
-    /** A line longer than this is scanned in pieces, so a dump without newlines cannot exhaust memory. */
-    public const DEFAULT_MAX_LINE_BYTES = 64 * 1024 * 1024;
+    /** A longer line is scanned in pieces: without PCRE JIT, regex cost grows with the square of the haystack. */
+    public const DEFAULT_MAX_LINE_BYTES = 64 * 1024;
 
     /** @var array<string, int> */
     private array $findings = [];
@@ -84,11 +84,14 @@ final class UnscrubbedDataScanner
     public function scan(string $chunk): void
     {
         $this->bytes += strlen($chunk);
+        $held = strlen($this->pending);
         $this->pending .= $chunk;
 
-        $cut = strrpos($this->pending, "\n");
+        // Search only the new chunk: searching the whole held line made long lines quadratic.
+        $cut = strrpos($chunk, "\n");
 
         if ($cut !== false) {
+            $cut += $held;
             $this->scanText($this->overlap . substr($this->pending, 0, $cut + 1));
             $this->overlap = '';
             $this->pending = substr($this->pending, $cut + 1);

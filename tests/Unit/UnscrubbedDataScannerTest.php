@@ -16,9 +16,19 @@ it('ignores the addresses a Foggy rule generates', function () {
     $scanner = new UnscrubbedDataScanner();
 
     // A rule can leave a word character after the address, as in a file name.
-    $scanner->scan("('mail_12@example.org'),('mail_13@example.com'),('redacted@example.org_2023.pdf')\n");
+    $scanner->scan(
+        "('mail_12@example.org'),('mail_13@example.com'),('redacted@example.org_2023.pdf'),('redacted@example.org9')\n"
+    );
 
     expect($scanner->findings())->toBe([]);
+});
+
+it('flags a real domain that only starts like a reserved one', function () {
+    $scanner = new UnscrubbedDataScanner();
+
+    $scanner->scan("('jane@example.org9.dk'),('jane@example.organic.dk')\n");
+
+    expect($scanner->findings())->toBe(['email address' => 2]);
 });
 
 it('flags IBANs and CPR numbers', function (string $payload, string $expected) {
@@ -173,4 +183,18 @@ it('scans the text after the last newline when finished', function () {
     $scanner->finish();
 
     expect($scanner->findings())->toHaveKey('email address');
+});
+
+it('scans a long line without newlines in bounded time', function () {
+    $jit = ini_set('pcre.jit', '0');
+    $scanner = new UnscrubbedDataScanner();
+    $chunk = str_repeat('x', 8192);
+
+    for ($i = 0; $i < 128; $i++) {
+        $scanner->scan($chunk);
+    }
+    $scanner->scan(" jane.doe@acme-corp.com\n");
+    ini_set('pcre.jit', (string) $jit);
+
+    expect($scanner->findings())->toBe(['email address' => 1]);
 });
