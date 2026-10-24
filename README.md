@@ -83,7 +83,7 @@ wolf gets switched off. Replace them per project:
 // config/foggy.php
 return [
     'scan_patterns' => [
-        'email address' => '/[\w.%+-]+@(?!example\.(?:org|com|net)\b)[\w-]+\.[a-z]{2,}/i',
+        'email address' => '/[\w.%+-]+@(?!example\.(?:org|com|net)(?![a-z]))[\w-]+\.[a-z]{2,}/i',
         'employee number' => '/\bEMP-\d{5}\b/',
     ],
 ];
@@ -92,10 +92,12 @@ return [
 The patterns are replaced, not merged, so a default that is noisy against your
 data can simply be dropped.
 
-One constraint: the scan reads the dump in chunks and carries 256 bytes between
-them, so a pattern that can match more than that could miss an occurrence
-straddling a chunk boundary. The defaults are well inside it (an email address
-caps out at 254 characters). If you add something longer, widen the window:
+The scan only looks at whole lines, so a match is never split or invented by a
+chunk boundary. A single line longer than 64 MB is the exception: it is scanned
+in pieces, with 256 bytes carried between them, so a pattern that can match more
+than that could miss an occurrence there. The defaults are well inside it (an
+email address caps out at 254 characters). If you add something longer, widen
+the window:
 
 ```php
 // config/foggy.php

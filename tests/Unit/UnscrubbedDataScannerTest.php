@@ -15,7 +15,8 @@ it('flags an email address that survived scrubbing', function () {
 it('ignores the addresses a Foggy rule generates', function () {
     $scanner = new UnscrubbedDataScanner();
 
-    $scanner->scan("('mail_12@example.org'),('mail_13@example.com')\n");
+    // A rule can leave a word character after the address, as in a file name.
+    $scanner->scan("('mail_12@example.org'),('mail_13@example.com'),('redacted@example.org_2023.pdf')\n");
 
     expect($scanner->findings())->toBe([]);
 });
@@ -24,6 +25,7 @@ it('flags IBANs and CPR numbers', function (string $payload, string $expected) {
     $scanner = new UnscrubbedDataScanner();
 
     $scanner->scan($payload);
+    $scanner->finish();
 
     expect($scanner->findings())->toHaveKey($expected);
 })->with([
@@ -46,6 +48,7 @@ it('accepts project specific patterns', function () {
     $scanner = new UnscrubbedDataScanner(['employee number' => '/\bEMP-\d{5}\b/']);
 
     $scanner->scan('assigned to EMP-40127 last week, contact them@acme-corp.com');
+    $scanner->finish();
 
     // Only the supplied pattern applies — the defaults are replaced, not merged,
     // so a project can drop one that is noisy against its data.
@@ -88,8 +91,9 @@ it('lets a project widen the overlap for a longer custom pattern', function () {
     // too little of it to carry the TOK- prefix into the second chunk.
     $chunks = [str_repeat('x', 300) . substr($token, 0, 300), substr($token, 300)];
 
-    $narrow = new UnscrubbedDataScanner($pattern);
-    $wide = new UnscrubbedDataScanner($pattern, overlapBytes: 512);
+    // The overlap only applies to lines over the limit, so force that path.
+    $narrow = new UnscrubbedDataScanner($pattern, maxLineBytes: 100);
+    $wide = new UnscrubbedDataScanner($pattern, overlapBytes: 512, maxLineBytes: 100);
 
     foreach ($chunks as $chunk) {
         $narrow->scan($chunk);
@@ -106,6 +110,7 @@ it('records a pattern that fails partway through a scan, instead of reading it a
     $scanner = new UnscrubbedDataScanner(['unicode word' => '/\p{L}+@acme/u']);
 
     $scanner->scan("\xC3\x28 someone@acme");
+    $scanner->finish();
 
     expect($scanner->errors())->toHaveKey('unicode word')
         ->and($scanner->findings())->toBe([]);
@@ -119,10 +124,10 @@ it('reports no errors for a scan that completes', function () {
     expect($scanner->errors())->toBe([]);
 });
 
-it('carries nothing between chunks when asked for no overlap', function () {
+it('carries nothing between pieces of an over-long line when asked for no overlap', function () {
     // substr($haystack, -0) is substr($haystack, 0) — the whole thing — so a
     // zero overlap used to retain every chunk and grow without bound.
-    $scanner = new UnscrubbedDataScanner(overlapBytes: 0);
+    $scanner = new UnscrubbedDataScanner(overlapBytes: 0, maxLineBytes: 10);
 
     $scanner->scan('padding hidden@acme');
     $scanner->scan("-corp.com');\n");
@@ -135,4 +140,37 @@ it('refuses a negative overlap', function () {
     // whole haystack on every chunk.
     expect(fn () => new UnscrubbedDataScanner(overlapBytes: -1))
         ->toThrow(InvalidArgumentException::class, 'overlap');
+});
+
+it('does not report a match that a chunk boundary invented', function () {
+    $scanner = new UnscrubbedDataScanner();
+
+    // Cut mid-domain, "redacted@example.or" escapes the example.org exclusion.
+    $scanner->scan("('redacted@example.or");
+    $scanner->scan("g'),('redacted@example.org');\n");
+    $scanner->finish();
+
+    expect($scanner->findings())->toBe([]);
+});
+
+it('counts a match near a chunk boundary once', function () {
+    $scanner = new UnscrubbedDataScanner();
+
+    $scanner->scan("ping jane.doe@acme-corp.com\n");
+    $scanner->scan("nothing here\n");
+    $scanner->finish();
+
+    expect($scanner->findings())->toBe(['email address' => 1]);
+});
+
+it('scans the text after the last newline when finished', function () {
+    $scanner = new UnscrubbedDataScanner();
+
+    $scanner->scan("clean line\nping jane.doe@acme-corp.com");
+
+    expect($scanner->findings())->toBe([]);
+
+    $scanner->finish();
+
+    expect($scanner->findings())->toHaveKey('email address');
 });
