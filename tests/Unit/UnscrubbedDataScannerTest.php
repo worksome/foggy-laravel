@@ -19,6 +19,8 @@ it('ignores the addresses a Foggy rule generates', function () {
     $scanner->scan(
         "('mail_12@example.org'),('mail_13@example.com'),('redacted@example.org_2023.pdf'),('redacted@example.org9')\n"
     );
+    // A rule rewrites only user@label.tld, so jane@acme.co.uk keeps its tail.
+    $scanner->scan("('redacted@example.org.uk'),('redacted@example.org-group.com')\n");
 
     expect($scanner->findings())->toBe([]);
 });
