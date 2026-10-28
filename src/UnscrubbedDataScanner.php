@@ -13,9 +13,8 @@ use InvalidArgumentException;
  * column on a table that is already `withData: true` is dumped raw, and nothing
  * about the config or the schema reveals that.
  *
- * Chunks arrive in whatever sizes the stream hands over, so the tail of each one
- * is carried into the next — otherwise a value straddling a boundary would go
- * unnoticed.
+ * Only whole lines are scanned. A chunk cut mid-token makes a false word boundary,
+ * so scanning raw chunks reported matches that were not in the dump.
  */
 final class UnscrubbedDataScanner
 {
@@ -25,7 +24,7 @@ final class UnscrubbedDataScanner
      * with the `foggy.scan_patterns` config key.
      */
     public const DEFAULT_PATTERNS = [
-        'email address' => '/[\w.%+-]+@(?!example\.(?:org|com|net)\b)[\w-]+\.[a-z]{2,}/i',
+        'email address' => '/[\w.%+-]+@(?!example\.(?:org|com|net)(?![a-z]|\d[\w-]*\.[a-z]))[\w-]+\.[a-z]{2,}/i',
         'IBAN' => '/\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){3,7}\b/',
         'Danish CPR number' => '/\b\d{6}-\d{4}\b/',
     ];
@@ -35,6 +34,9 @@ final class UnscrubbedDataScanner
      * any default pattern can match, so the default overlap clears that.
      */
     public const DEFAULT_OVERLAP_BYTES = 256;
+
+    /** A longer line is scanned in pieces: without PCRE JIT, regex cost grows with the square of the haystack. */
+    public const DEFAULT_MAX_LINE_BYTES = 64 * 1024;
 
     /** @var array<string, int> */
     private array $findings = [];
@@ -46,17 +48,22 @@ final class UnscrubbedDataScanner
 
     private string $overlap = '';
 
+    private string $pending = '';
+
     /**
      * @param array<string, string> $patterns     Label => regex
      * @param int                   $overlapBytes Raise this if a custom pattern can match more
      *                                            than {@see self::DEFAULT_OVERLAP_BYTES}, or such
-     *                                            a match could be missed on a chunk boundary
+     *                                            a match could be missed on a chunk boundary.
+     *                                            Applies only to lines over $maxLineBytes
+     * @param int                   $maxLineBytes Longest line held in memory before it is scanned in pieces
      *
      * @throws InvalidArgumentException when a pattern will not compile, or the overlap is negative
      */
     public function __construct(
         private readonly array $patterns = self::DEFAULT_PATTERNS,
         private readonly int $overlapBytes = self::DEFAULT_OVERLAP_BYTES,
+        private readonly int $maxLineBytes = self::DEFAULT_MAX_LINE_BYTES,
     ) {
         // A negative becomes a positive substr offset below, which would retain
         // nearly the whole haystack on every chunk and grow without bound.
@@ -77,9 +84,43 @@ final class UnscrubbedDataScanner
     public function scan(string $chunk): void
     {
         $this->bytes += strlen($chunk);
+        $held = strlen($this->pending);
+        $this->pending .= $chunk;
 
-        $haystack = $this->overlap . $chunk;
+        // Search only the new chunk: searching the whole held line made long lines quadratic.
+        $cut = strrpos($chunk, "\n");
 
+        if ($cut !== false) {
+            $cut += $held;
+            $this->scanText($this->overlap . substr($this->pending, 0, $cut + 1));
+            $this->overlap = '';
+            $this->pending = substr($this->pending, $cut + 1);
+
+            return;
+        }
+
+        if (strlen($this->pending) > $this->maxLineBytes) {
+            $haystack = $this->overlap . $this->pending;
+            $this->scanText($haystack);
+            // Not substr(-0): that is substr(0), i.e. keep everything.
+            $this->overlap = $this->overlapBytes === 0 ? '' : substr($haystack, -$this->overlapBytes);
+            $this->pending = '';
+        }
+    }
+
+    /** Scans whatever is left after the last newline. Call once the stream has ended. */
+    public function finish(): void
+    {
+        if ($this->pending !== '' || $this->overlap !== '') {
+            $this->scanText($this->overlap . $this->pending);
+        }
+
+        $this->overlap = '';
+        $this->pending = '';
+    }
+
+    private function scanText(string $haystack): void
+    {
         foreach ($this->patterns as $label => $pattern) {
             $matches = preg_match_all($pattern, $haystack);
 
@@ -96,14 +137,11 @@ final class UnscrubbedDataScanner
                 $this->findings[$label] = ($this->findings[$label] ?? 0) + $matches;
             }
         }
-
-        // Not substr(-0): that is substr(0), i.e. keep everything.
-        $this->overlap = $this->overlapBytes === 0 ? '' : substr($haystack, -$this->overlapBytes);
     }
 
     /**
-     * Pattern label => number of matches. Counts are approximate, because the
-     * overlap between chunks is scanned twice; presence is what matters.
+     * Pattern label => number of matches. Exact, except on lines over the
+     * line limit, where the overlap is scanned twice.
      *
      * @return array<string, int>
      */

@@ -60,6 +60,26 @@ it('passes the configured scan overlap to the scanner', function () {
         ->toThrow(InvalidArgumentException::class, 'Scan overlap must not be negative.');
 });
 
+it('uploads one part at a time, so a slow dump cannot stall parts in flight', function () {
+    $disk = Mockery::mock(Illuminate\Contracts\Filesystem\Filesystem::class);
+    $disk->shouldReceive('writeStream')->once()
+        ->withArgs(
+            fn ($path, $resource, $options) => $options === ['concurrency' => 1] && stream_get_contents(
+                $resource
+            ) !== false
+        )
+        ->andReturnTrue();
+    $disk->shouldReceive('put')->once()->andReturnTrue();
+
+    $factory = Mockery::mock(Illuminate\Contracts\Filesystem\Factory::class);
+    $factory->shouldReceive('disk')->andReturn($disk);
+    Storage::swap($factory);
+
+    $this->app[Kernel::class]->registerCommand(new StubDumpToDiskCommand());
+
+    $this->artisan(StubDumpToDiskCommand::class, ['--disk' => 'dumps'])->assertOk();
+});
+
 it('aborts the write of a dump the scan objects to, so the disk never completes it', function () {
     $completed = false;
 
