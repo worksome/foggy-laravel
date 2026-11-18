@@ -92,7 +92,8 @@ class DatabaseDumpToDiskCommand extends Command
             // the catch. Ignoring either would publish a pointer to an object
             // that was never stored — the exact thing the pointer exists to prevent.
             $upload = ForwardOnlyStream::wrap($pipes[1]);
-            $written = $disk->writeStream($key, $upload);
+            // One part at a time: the SDK reads the next part from the pipe without servicing parts in flight, so S3 times them out.
+            $written = $disk->writeStream($key, $upload, ['concurrency' => 1]);
             $drained = feof($pipes[1]);
 
             fclose($pipes[1]);

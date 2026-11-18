@@ -48,17 +48,23 @@ it('fails the final read once the whole payload has been scanned', function () {
         ->and(UnscrubbedDataFilter::scanner()->bytes())->toBe(strlen($payload));
 });
 
-it('widens the overlap for a longer custom pattern', function () {
+it('catches a long custom-pattern match across a bucket boundary without widening the overlap', function () {
     $pattern = ['long token' => '/TOK-[A-Z0-9]{400}/'];
     // php://temp feeds the filter in 8192-byte buckets, so the token straddles the first boundary.
     $payload = str_repeat('x', 8192 - 300) . 'TOK-' . str_repeat('A', 400) . "\n";
 
     UnscrubbedDataFilter::register($pattern);
-    gzdecode(pipe($payload));
-    expect(UnscrubbedDataFilter::scanner()->findings())->toBe([]);
 
-    UnscrubbedDataFilter::register($pattern, overlapBytes: 512);
     expect(fn () => pipe($payload))->toThrow(RuntimeException::class, 'rejected the dump');
+});
+
+it('does not reject a clean dump because a bucket boundary cut a value', function () {
+    // Cut at the bucket boundary, "redacted@example.or" escaped the example.org exclusion.
+    $row = "('redacted@example.org'),\n";
+    $payload = str_repeat('x', 8192 - 22) . "\n" . str_repeat($row, 200);
+
+    expect(gzdecode(pipe($payload)))->toBe($payload)
+        ->and(UnscrubbedDataFilter::scanner()->findings())->toBe([]);
 });
 
 it('can be registered repeatedly without losing the filter', function () {

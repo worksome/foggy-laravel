@@ -62,6 +62,10 @@ final class UnscrubbedDataFilter extends php_user_filter
             $passed = true;
         }
 
+        if ($closing) {
+            self::scanner()->finish();
+        }
+
         // Failing the final read stops the disk completing the object, so a rejected dump is never stored.
         if ($closing && (self::scanner()->findings() !== [] || self::scanner()->errors() !== [])) {
             throw new RuntimeException('The unscrubbed-data scan rejected the dump.');
